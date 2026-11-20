@@ -46,7 +46,7 @@ button:active:not(:disabled){transform:translateY(3px);box-shadow:0 1px 0 #0005}
     <canvas id="c" width="1152" height="648"></canvas>
     <div id="ovLobby" class="overlay">
       <h1>ELF GIFT TOWER</h1>
-      <p>Grab gifts in the garden tunnel and stack them under your team's tree. First team to the target height wins!<br>Grab a BOMB 💣 and run into a rival team's tree to blow it up. Taller piles need more bombs.<br>When a tree falls, its gifts SCATTER around the base for anyone to grab, and that tree gets a 20-second shield.<br>No stealing from other elves in this one.</p>
+      <p>Grab gifts in the garden tunnel and stack them under your team's tree. First team to the target height wins!<br>Grab a BOMB 💣 and run into a rival team's tree to blow it up. Taller piles need more bombs.<br>When a tree falls, its gifts SCATTER around the base for anyone to grab, and that tree gets a 20-second shield.<br>In the maze, bump a rival elf carrying MORE gifts than you to steal their whole stack! Bases are safe.</p>
       <p class="big" id="lobbyMsg">Type your elf name below and press JOIN</p>
     </div>
     <div id="ovEnd" class="overlay hidden">
@@ -263,6 +263,7 @@ function botThink(e){
  const isRaider=H.elves.filter(o=>o.bot&&o.team===e.team)[0]===e;
  if(isRaider&&e.cane===0&&H.canes.length===0&&e.pile===0){}
  if(!(isRaider&&(e.cane||H.canes.length))&&(e.pile>=4||(e.pile>0&&(dh<90||H.time<15||H.scores[e.team]+e.pile>=H.target))))tgt=home;
+ if(!tgt&&!e.cane&&e.imm<=0&&baseOf(e.x,e.y)<0){const prey=H.elves.filter(o=>o.team!==e.team&&o.pile>e.pile+1&&o.imm<=0&&baseOf(o.x,o.y)<0).sort((a,b)=>dist(a,e)-dist(b,e))[0];if(prey&&dist(prey,e)<90)tgt=prey}
  if(!tgt&&e.cane){let best=-1,bs=-1;for(let t=0;t<H.k;t++){if(t===e.team||H.tree[t].shield>0)continue;const sc=H.scores[t]*3-dist(e,baseCenter(t))/20;if(sc>bs){bs=sc;best=t}}if(best>=0)tgt=baseCenter(best)}
  if(!tgt&&!e.cane&&H.canes.length){const c=H.canes.slice().sort((a,b)=>dist(a,e)-dist(b,e))[0];
   const mates=H.elves.filter(o=>o.bot&&o.team===e.team&&!o.cane),closest=mates.slice().sort((a,b)=>dist(a,c)-dist(b,c))[0];
@@ -290,6 +291,14 @@ function hostUpdate(dt){
   else botStep(e,dt);
   for(let i=H.gifts.length-1;i>=0;i--){const g=H.gifts[i];if(Math.hypot(g.x-e.x,g.y-e.y)<7){H.gifts.splice(i,1);e.pile++}}
   if(e.pile>0&&baseOf(e.x,e.y)===e.team){H.scores[e.team]+=e.pile;e.del+=e.pile;H.ev.push([EVID++,0,e.i,e.pile,Math.round(e.x),Math.round(e.y)]);e.pile=0}}
+ const E=H.elves;
+ for(let i=0;i<E.length;i++)for(let j=i+1;j<E.length;j++){const a=E[i],b=E[j];
+  if(a.team===b.team||a.imm>0||b.imm>0||a.pile===b.pile)continue;
+  const d=dist(a,b);if(d>=8)continue;if(baseOf(a.x,a.y)>=0||baseOf(b.x,b.y)>=0)continue;
+  const[w,l]=a.pile<b.pile?[a,b]:[b,a],n=l.pile,dd=d||.01,nx=(l.x-w.x)/dd||1,ny=(l.y-w.y)/dd;
+  w.pile+=n;l.pile=0;w.imm=l.imm=1.5;
+  if(l.bot){l.kx=nx*110;l.ky=ny*110}else{l.kn=KNID++;l.knx=nx*110;l.kny=ny*110}
+  w.think=l.think=0;H.ev.push([EVID++,1,w.i,n,Math.round(w.x),Math.round(w.y)])}
  // candy canes
  H.caneT-=dt;if(H.caneT<=0){H.caneT=7+Math.random()*4;if(H.canes.length<Math.max(1,Math.min(3,Math.floor(H.k/2)+1)))spawnCane()}
  for(const e of H.elves){
@@ -333,6 +342,7 @@ function applySnap(d){if(!d||typeof d!=='object')return;
  for(const ev of SN.v){if(!Array.isArray(ev))continue;const id=num(ev[0]);if(id<=lastEv)continue;maxId=Math.max(maxId,id);if(lastEv===0)continue;
   const type=num(ev[1]),i=num(ev[2]),n=num(ev[3]),x=num(ev[4]),y=num(ev[5]),who=R&&R.byI.get(i),col=who?TEAMS[who.team].c:'#fff';
   if(type===0){floats.push({x,y:y-22,t:`+${n}`,c:'#f2c94c',life:1.4});burst(x,y-10,'#f2c94c',16);if(i===myI){beep(784,.1);setTimeout(()=>beep(1046,.15),90)}}
+  else if(type===1){floats.push({x,y:y-22,t:`STOLE ${n}!`,c:col,life:1.4});burst(x,y-10,col,12);if(i===myI)beep(220,.25,'sawtooth',.05,880)}
   else if(type===4){if(i===myI){beep(988,.08);setTimeout(()=>beep(1318,.12),80);floats.push({x,y:y-26,t:'BOMB!',c:'#ff8a1f',life:1.2})}burst(x,y-6,'#ff8a1f',8)}
   else if(type===2){const t=baseOf(x,y);shake[t]=.5;floats.push({x,y:y-30,t:`BOOM! ${n} more to topple`,c:'#ff8a1f',life:1.6});burst(x,y-10,'#ff8a1f',22);burst(x,y-10,'#ffe14a',14);burst(x,y-10,'#555',10);beep(90,.35,'sawtooth',.07,40)}
   else if(type===3){const t=baseOf(x,y);fallT[t]=2.2;floats.push({x,y:y-34,t:n?`TIMBER! ${n} gifts scattered`:'TIMBER!',c:col,life:2.2});burst(x,y-10,'#ff8a1f',24);burst(x,y-10,'#2f9a4c',26);burst(x,y-10,'#f2c94c',18);beep(80,.4,'sawtooth',.07,35);beep(330,.5,'sawtooth',.06,60)}}
@@ -382,7 +392,7 @@ function draw(){
   X.fillStyle='#0002';X.fillRect(x-3,y+3,7,1)}
  const list=[];
  if(SN&&R&&SN.rd===R.rd)for(const[i,o]of disp){if(o.rd!==SN.rd)continue;const who=R.byI.get(i);if(!who)continue;
-  const isMe=i===myI&&playing();list.push({i,x:isMe?me.x:o.x,y:isMe?me.y:o.y,pile:o.pile,imm:0,cane:o.cane,mov:isMe?me.mov:o.mov,who,isMe})}
+  const isMe=i===myI&&playing();list.push({i,x:isMe?me.x:o.x,y:isMe?me.y:o.y,pile:o.pile,imm:o.imm,cane:o.cane,mov:isMe?me.mov:o.mov,who,isMe})}
  list.sort((a,b)=>a.y-b.y);
  for(const e of list){const x=Math.round(e.x),y=Math.round(e.y);
   X.fillStyle='#0003';X.fillRect(x-5,y+2,11,2);
